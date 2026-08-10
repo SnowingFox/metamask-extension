@@ -1,16 +1,17 @@
+import { createDeferredPromise } from '@metamask/utils';
 import { Suite } from 'mocha';
+import { EXPECTED_TRON_ADDRESSES_BY_INDEX } from '../../constants';
 import FixtureBuilderV2 from '../../fixtures/fixture-builder-v2';
-import {
-  createSharedTronFixture,
-  type SharedTronFixture,
-} from '../../helpers/tron/shared-tron-fixture';
 import { Driver } from '../../webdriver/driver';
 import { login } from '../../page-objects/flows/login.flow';
 import {
   selectAllNetworksFromNetworkSelect,
   switchToNetworkFromNetworkSelect,
 } from '../../page-objects/flows/network.flow';
-import { waitUntilAccountTreeSyncIdle } from '../../page-objects/flows/tron-account-derivation.flow';
+import {
+  addNHdAccountsForTronDerivation,
+  waitUntilAccountTreeSyncIdle,
+} from '../../page-objects/flows/tron-account-derivation.flow';
 import AccountListPage from '../../page-objects/pages/account-list-page';
 import HomePage from '../../page-objects/pages/home/homepage';
 import TokensTab from '../../page-objects/pages/home/tokens-tab';
@@ -21,7 +22,10 @@ import {
   TRON_PORTFOLIO_LOW_VALUE_ASSET_NAMES,
   TRON_PORTFOLIO_MAIN_LIST_ASSET_NAMES,
 } from './fixtures/environments';
-import type { TronFixtureAccount } from './fixtures/with-tron-fixtures';
+import {
+  withTronFixtures,
+  type TronFixtureAccount,
+} from './fixtures/with-tron-fixtures';
 
 /** Max wait for Tron Snap balances to appear in the token list after refresh. */
 const TRON_ASSET_LIST_TIMEOUT_MS = 30_000;
@@ -43,31 +47,62 @@ const TRON_ASSETS_MANIFEST_FLAGS = {
   },
 } as const;
 
-function buildTronAssetsFixture(): FixtureBuilderV2 {
-  return new FixtureBuilderV2()
+const TRON_ASSETS_EMPTY_ACCOUNT_LABEL = 'Account 1';
+const TRON_ASSETS_PORTFOLIO_ACCOUNT_LABEL = 'Account 2';
+
+const TRON_ASSETS_FIXTURE_STATE = {
+  fixtures: new FixtureBuilderV2()
     .withShowNativeTokenAsMainBalanceDisabled()
-    .withRemoteFeatureFlagController(TRON_ASSETS_REMOTE_FEATURE_FLAGS);
-}
+    .withRemoteFeatureFlagController(TRON_ASSETS_REMOTE_FEATURE_FLAGS)
+    .build(),
+  manifestFlags: TRON_ASSETS_MANIFEST_FLAGS,
+  title: 'Tron - Assets',
+};
 
-function tronAssetsTestConfig(account: TronFixtureAccount, title: string) {
-  return {
-    accounts: [account],
-    fixtures: buildTronAssetsFixture().build(),
-    manifestFlags: TRON_ASSETS_MANIFEST_FLAGS,
-    title,
-  };
-}
+const EMPTY_ACCOUNT_FIXTURE: TronFixtureAccount[] = [
+  {
+    ...EMPTY_TRON_ACCOUNT,
+    address: EXPECTED_TRON_ADDRESSES_BY_INDEX[0],
+  },
+];
 
-async function startTronAssetsFixture(
-  fixture: SharedTronFixture,
-): Promise<void> {
-  const { driver } = await fixture.start();
+const PORTFOLIO_ACCOUNT_FIXTURE: TronFixtureAccount[] = [
+  {
+    ...TRON_PORTFOLIO_ACCOUNT,
+    address: EXPECTED_TRON_ADDRESSES_BY_INDEX[1],
+  },
+];
+
+const TRON_ASSETS_FIXTURE = {
+  ...TRON_ASSETS_FIXTURE_STATE,
+  accounts: [...EMPTY_ACCOUNT_FIXTURE, ...PORTFOLIO_ACCOUNT_FIXTURE],
+} satisfies Parameters<typeof withTronFixtures>[0];
+
+async function prepareTronAssetsFixture(driver: Driver): Promise<void> {
   await login(driver, { validateBalance: false });
   await switchToNetworkFromNetworkSelect(driver, 'Popular', 'Tron');
   await waitUntilAccountTreeSyncIdle(driver);
+  await addNHdAccountsForTronDerivation(driver, 2);
+  await waitUntilAccountTreeSyncIdle(driver);
 }
 
-async function landOnTronHome(driver: Driver): Promise<void> {
+let tronAssetsDriver: Driver | undefined;
+let tronAssetsFixturePromise: Promise<void> | undefined;
+let releaseTronAssetsFixture:
+  | ReturnType<typeof createDeferredPromise<void>>
+  | undefined;
+
+function getTronAssetsDriver(): Driver {
+  if (!tronAssetsDriver) {
+    throw new Error('The shared Tron Assets fixture is not running');
+  }
+  return tronAssetsDriver;
+}
+
+async function landOnTronHome(
+  driver: Driver,
+  accountLabel = TRON_ASSETS_EMPTY_ACCOUNT_LABEL,
+): Promise<void> {
   await driver.navigate();
   const homePage = new HomePage(driver);
   await homePage.checkPageIsLoaded();
@@ -76,7 +111,6 @@ async function landOnTronHome(driver: Driver): Promise<void> {
 
   const accountList = new AccountListPage(driver);
   await accountList.checkPageIsLoaded();
-  const accountLabel = 'Account 1';
   await accountList.selectAccount(accountLabel);
   await homePage.headerNavbar.checkAccountLabel(accountLabel);
   await waitUntilAccountTreeSyncIdle(driver);
@@ -99,26 +133,42 @@ async function waitForTronAssetList(
 describe('Tron - Assets', function (this: Suite) {
   this.timeout(300_000);
 
-  describe('Empty account fixture', function () {
-    const emptyAccountFixture = createSharedTronFixture(
-      tronAssetsTestConfig(
-        EMPTY_TRON_ACCOUNT,
-        'Tron - Assets empty account fixture',
-      ),
+  before('Set up shared Tron Assets fixture', async function () {
+    const fixtureReady = createDeferredPromise<void>();
+    const fixtureReleased = createDeferredPromise<void>();
+    releaseTronAssetsFixture = fixtureReleased;
+
+    tronAssetsFixturePromise = withTronFixtures(
+      TRON_ASSETS_FIXTURE,
+      async ({ driver }: { driver: Driver }) => {
+        tronAssetsDriver = driver;
+        await prepareTronAssetsFixture(driver);
+        fixtureReady.resolve();
+        await fixtureReleased.promise;
+      },
     );
 
-    // eslint-disable-next-line mocha/no-hooks-for-single-case -- this cluster intentionally owns one isolated empty-account node
-    before('Set up empty-account Tron fixture', async function () {
-      await startTronAssetsFixture(emptyAccountFixture);
-    });
+    const fixtureState = await Promise.race([
+      fixtureReady.promise.then(() => 'ready' as const),
+      tronAssetsFixturePromise.then(() => 'completed' as const),
+    ]);
+    if (fixtureState === 'completed') {
+      throw new Error(
+        'The Tron Assets fixture completed before its shared context was ready',
+      );
+    }
+  });
 
-    // eslint-disable-next-line mocha/no-hooks-for-single-case -- fixture teardown must remain paired with its one test
-    after('Shut down empty-account Tron fixture', async function () {
-      await emptyAccountFixture.stop();
-    });
+  after('Shut down shared Tron Assets fixture', async function () {
+    releaseTronAssetsFixture?.resolve();
+    if (tronAssetsFixturePromise) {
+      await tronAssetsFixturePromise;
+    }
+  });
 
+  describe('Empty account fixture', function () {
     it('For an empty account, TRX should be present with a balance of 0', async function () {
-      const { driver } = emptyAccountFixture.getContext();
+      const driver = getTronAssetsDriver();
       await landOnTronHome(driver);
 
       const tokensTab = new TokensTab(driver);
@@ -135,25 +185,10 @@ describe('Tron - Assets', function (this: Suite) {
   });
 
   describe('Portfolio account fixture', function () {
-    const portfolioAccountFixture = createSharedTronFixture(
-      tronAssetsTestConfig(
-        TRON_PORTFOLIO_ACCOUNT,
-        'Tron - Assets portfolio account fixture',
-      ),
-    );
-
-    before('Set up portfolio-account Tron fixture', async function () {
-      await startTronAssetsFixture(portfolioAccountFixture);
-    });
-
-    after('Shut down portfolio-account Tron fixture', async function () {
-      await portfolioAccountFixture.stop();
-    });
-
     describe('Assets list', function () {
       it('Lists TRX, TRC10, TRC20 with name, symbol, amount, fiat for portfolio account', async function () {
-        const { driver } = portfolioAccountFixture.getContext();
-        await landOnTronHome(driver);
+        const driver = getTronAssetsDriver();
+        await landOnTronHome(driver, TRON_ASSETS_PORTFOLIO_ACCOUNT_LABEL);
 
         const tokensTab = new TokensTab(driver);
         await waitForTronAssetList(tokensTab, 'Tron');
@@ -200,8 +235,8 @@ describe('Tron - Assets', function (this: Suite) {
       });
 
       it('Low-value assets section hides tokens under $1 until expanded', async function () {
-        const { driver } = portfolioAccountFixture.getContext();
-        await landOnTronHome(driver);
+        const driver = getTronAssetsDriver();
+        await landOnTronHome(driver, TRON_ASSETS_PORTFOLIO_ACCOUNT_LABEL);
         const tokensTab = new TokensTab(driver);
         await tokensTab.checkTokenNameVisible('Tron', {
           timeout: TRON_ASSET_LIST_TIMEOUT_MS,
@@ -234,8 +269,8 @@ describe('Tron - Assets', function (this: Suite) {
 
       describe('Networks filter', function () {
         it('All networks filter shows other chains alongside Tron', async function () {
-          const { driver } = portfolioAccountFixture.getContext();
-          await landOnTronHome(driver);
+          const driver = getTronAssetsDriver();
+          await landOnTronHome(driver, TRON_ASSETS_PORTFOLIO_ACCOUNT_LABEL);
           const tokensTab = new TokensTab(driver);
           await waitForTronAssetList(tokensTab);
           await selectAllNetworksFromNetworkSelect(driver);
@@ -245,8 +280,8 @@ describe('Tron - Assets', function (this: Suite) {
         });
 
         it('Current network filter shows only Tron assets', async function () {
-          const { driver } = portfolioAccountFixture.getContext();
-          await landOnTronHome(driver);
+          const driver = getTronAssetsDriver();
+          await landOnTronHome(driver, TRON_ASSETS_PORTFOLIO_ACCOUNT_LABEL);
           // The previous test selects All Networks. Reset the shared browser
           // explicitly so this test and the following detail tests use Tron.
           await switchToNetworkFromNetworkSelect(driver, 'Popular', 'Tron');
@@ -267,8 +302,8 @@ describe('Tron - Assets', function (this: Suite) {
 
     describe('Asset details', function () {
       it('TRX asset details: header, chart, action buttons, daily resource, sections', async function () {
-        const { driver } = portfolioAccountFixture.getContext();
-        await landOnTronHome(driver);
+        const driver = getTronAssetsDriver();
+        await landOnTronHome(driver, TRON_ASSETS_PORTFOLIO_ACCOUNT_LABEL);
         const tokensTab = new TokensTab(driver);
         await waitForTronAssetList(tokensTab);
         await tokensTab.clickOnAsset('Tron');
@@ -287,8 +322,8 @@ describe('Tron - Assets', function (this: Suite) {
       });
 
       it('TRC20 asset details: header, chart, action buttons, sections — no daily resource', async function () {
-        const { driver } = portfolioAccountFixture.getContext();
-        await landOnTronHome(driver);
+        const driver = getTronAssetsDriver();
+        await landOnTronHome(driver, TRON_ASSETS_PORTFOLIO_ACCOUNT_LABEL);
         const tokensTab = new TokensTab(driver);
         await waitForTronAssetList(tokensTab);
         await tokensTab.clickOnAsset('Tether');
