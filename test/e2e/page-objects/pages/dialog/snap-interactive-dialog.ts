@@ -208,8 +208,7 @@ class SnapInteractiveDialog {
 
   async selectCheckbox() {
     console.log(`Selecting checkbox`);
-    // TODO: Use clickElement once MMDS Checkbox input is Selenium-visible.
-    await this.driver.clickDesignSystemCheckbox(selectors.exampleCheckbox);
+    await this.driver.clickElement(selectors.exampleCheckbox);
   }
 
   async selectDropDownOption(exampleDropName: string, option: string) {

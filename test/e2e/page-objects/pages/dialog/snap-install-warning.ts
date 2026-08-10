@@ -34,8 +34,7 @@ class SnapInstallWarning {
 
   async clickCheckboxPermission() {
     console.log('Click checkbox permission');
-    // TODO: Use clickElement once MMDS Checkbox input is Selenium-visible.
-    await this.driver.clickDesignSystemCheckbox(this.checkBoxPermission);
+    await this.driver.clickElement(this.checkBoxPermission);
   }
 
   async clickConfirmButton() {
