@@ -9,13 +9,18 @@ import {
 import HomePage from '../../page-objects/pages/home/homepage';
 import TokensTab from '../../page-objects/pages/home/tokens-tab';
 import TronAssetDetailsPage from '../../page-objects/pages/asset/tron-asset-details';
+import { TronNode } from '../../seeder/tron/node';
 import {
   EMPTY_TRON_ACCOUNT,
   TRON_PORTFOLIO_ACCOUNT,
   TRON_PORTFOLIO_LOW_VALUE_ASSET_NAMES,
   TRON_PORTFOLIO_MAIN_LIST_ASSET_NAMES,
 } from './fixtures/environments';
-import { withTronFixtures } from './fixtures/with-tron-fixtures';
+import {
+  buildTronNodeOptions,
+  withTronFixtures,
+  type TronFixtureAccount,
+} from './fixtures/with-tron-fixtures';
 
 /** Max wait for Tron Snap balances to appear in the token list after refresh. */
 const TRON_ASSET_LIST_TIMEOUT_MS = 30_000;
@@ -36,6 +41,14 @@ const TRON_ASSETS_MANIFEST_FLAGS = {
     batchSell: { enabled: true },
   },
 } as const;
+
+const EMPTY_ACCOUNT_FIXTURE: TronFixtureAccount[] = [
+  { ...EMPTY_TRON_ACCOUNT },
+];
+
+const PORTFOLIO_ACCOUNT_FIXTURE: TronFixtureAccount[] = [
+  { ...TRON_PORTFOLIO_ACCOUNT },
+];
 
 function buildTronAssetsFixture(): FixtureBuilderV2 {
   return new FixtureBuilderV2()
@@ -77,10 +90,32 @@ async function waitForTronAssetList(
 describe('Tron - Assets', function (this: Suite) {
   this.timeout(180_000);
 
+  const sharedTronNode = new TronNode();
+
+  before('Start shared Tron node', async function () {
+    await sharedTronNode.start(
+      buildTronNodeOptions([
+        ...EMPTY_ACCOUNT_FIXTURE,
+        ...PORTFOLIO_ACCOUNT_FIXTURE,
+      ]),
+    );
+  });
+
+  after('Stop shared Tron node', async function () {
+    await sharedTronNode.quit();
+  });
+
   describe('Assets list', function () {
     it('For an empty account, TRX should be present with a balance of 0', async function () {
       await withTronFixtures(
-        tronAssetsTestConfig([EMPTY_TRON_ACCOUNT], this.test?.fullTitle()),
+        {
+          ...tronAssetsTestConfig(
+            EMPTY_ACCOUNT_FIXTURE,
+            this.test?.fullTitle(),
+          ),
+          borrowedTronNode: sharedTronNode,
+          includeAnvil: false,
+        },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);
 
@@ -100,7 +135,14 @@ describe('Tron - Assets', function (this: Suite) {
 
     it('Lists TRX, TRC10, TRC20 with name, symbol, amount, fiat for portfolio account', async function () {
       await withTronFixtures(
-        tronAssetsTestConfig([TRON_PORTFOLIO_ACCOUNT], this.test?.fullTitle()),
+        {
+          ...tronAssetsTestConfig(
+            PORTFOLIO_ACCOUNT_FIXTURE,
+            this.test?.fullTitle(),
+          ),
+          borrowedTronNode: sharedTronNode,
+          includeAnvil: false,
+        },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);
 
@@ -152,7 +194,14 @@ describe('Tron - Assets', function (this: Suite) {
 
     it('Low-value assets section hides tokens under $1 until expanded', async function () {
       await withTronFixtures(
-        tronAssetsTestConfig([TRON_PORTFOLIO_ACCOUNT], this.test?.fullTitle()),
+        {
+          ...tronAssetsTestConfig(
+            PORTFOLIO_ACCOUNT_FIXTURE,
+            this.test?.fullTitle(),
+          ),
+          borrowedTronNode: sharedTronNode,
+          includeAnvil: false,
+        },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);
           const tokensTab = new TokensTab(driver);
@@ -190,10 +239,14 @@ describe('Tron - Assets', function (this: Suite) {
     describe('Networks filter', function () {
       it('All networks filter shows other chains alongside Tron', async function () {
         await withTronFixtures(
-          tronAssetsTestConfig(
-            [TRON_PORTFOLIO_ACCOUNT],
-            this.test?.fullTitle(),
-          ),
+          {
+            ...tronAssetsTestConfig(
+              PORTFOLIO_ACCOUNT_FIXTURE,
+              this.test?.fullTitle(),
+            ),
+            borrowedTronNode: sharedTronNode,
+            includeAnvil: false,
+          },
           async ({ driver }: { driver: Driver }) => {
             await landOnTronHome(driver);
             const tokensTab = new TokensTab(driver);
@@ -208,10 +261,14 @@ describe('Tron - Assets', function (this: Suite) {
 
       it('Current network filter shows only Tron assets', async function () {
         await withTronFixtures(
-          tronAssetsTestConfig(
-            [TRON_PORTFOLIO_ACCOUNT],
-            this.test?.fullTitle(),
-          ),
+          {
+            ...tronAssetsTestConfig(
+              PORTFOLIO_ACCOUNT_FIXTURE,
+              this.test?.fullTitle(),
+            ),
+            borrowedTronNode: sharedTronNode,
+            includeAnvil: false,
+          },
           async ({ driver }: { driver: Driver }) => {
             await landOnTronHome(driver);
             const tokensTab = new TokensTab(driver);
@@ -234,7 +291,14 @@ describe('Tron - Assets', function (this: Suite) {
   describe('Asset details', function () {
     it('TRX asset details: header, chart, action buttons, daily resource, sections', async function () {
       await withTronFixtures(
-        tronAssetsTestConfig([TRON_PORTFOLIO_ACCOUNT], this.test?.fullTitle()),
+        {
+          ...tronAssetsTestConfig(
+            PORTFOLIO_ACCOUNT_FIXTURE,
+            this.test?.fullTitle(),
+          ),
+          borrowedTronNode: sharedTronNode,
+          includeAnvil: false,
+        },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);
           const tokensTab = new TokensTab(driver);
@@ -258,7 +322,14 @@ describe('Tron - Assets', function (this: Suite) {
 
     it('TRC20 asset details: header, chart, action buttons, sections — no daily resource', async function () {
       await withTronFixtures(
-        tronAssetsTestConfig([TRON_PORTFOLIO_ACCOUNT], this.test?.fullTitle()),
+        {
+          ...tronAssetsTestConfig(
+            PORTFOLIO_ACCOUNT_FIXTURE,
+            this.test?.fullTitle(),
+          ),
+          borrowedTronNode: sharedTronNode,
+          includeAnvil: false,
+        },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);
           const tokensTab = new TokensTab(driver);
