@@ -15,13 +15,18 @@ import AddressListModal from '../../page-objects/pages/multichain/address-list-m
 import NonEvmHomepage from '../../page-objects/pages/home/non-evm-homepage';
 import { selectTronNetwork } from '../../page-objects/flows/tron-network.flow';
 import { base58AddressToHex } from '../../seeder/tron/assets';
+import { TronNode } from '../../seeder/tron/node';
 import {
   SUN_PER_TRX,
   TRON_ACCOUNT_ADDRESS,
   TRX_TO_USD_RATE,
 } from './mocks/common-tron';
 import { EMPTY_TRON_ACCOUNT } from './fixtures/environments';
-import { withTronFixtures } from './fixtures/with-tron-fixtures';
+import {
+  buildTronNodeOptions,
+  type TronFixtureAccount,
+  withTronFixtures,
+} from './fixtures/with-tron-fixtures';
 import { TRX } from './fixtures/tokens';
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -55,7 +60,7 @@ function createDiscoveryTronTransaction(address: string) {
 }
 /* eslint-enable @typescript-eslint/naming-convention */
 
-function buildDiscoveryAccountsThrough(total: number) {
+function buildDiscoveryAccountsThrough(total: number): TronFixtureAccount[] {
   return EXPECTED_TRON_ADDRESSES_BY_INDEX.slice(0, total).map((address) => ({
     address,
     assets: [{ ...TRX, balance: SUN_PER_TRX, priceUsd: TRX_TO_USD_RATE }],
@@ -106,6 +111,21 @@ async function assertTronAddressesForAccounts(
   await accountList.closeMultichainAccountsPage();
 }
 
+const TRON_ACCOUNT_DERIVATION_DISCOVERY_ACCOUNTS: TronFixtureAccount[] =
+  buildDiscoveryAccountsThrough(5);
+
+const TRON_ACCOUNT_DERIVATION_EMPTY_ACCOUNTS: TronFixtureAccount[] = [
+  {
+    ...EMPTY_TRON_ACCOUNT,
+    address: EXPECTED_TRON_ADDRESSES_BY_INDEX[7],
+  },
+];
+
+const TRON_ACCOUNT_DERIVATION_ALL_ACCOUNTS: TronFixtureAccount[] = [
+  ...TRON_ACCOUNT_DERIVATION_DISCOVERY_ACCOUNTS,
+  ...TRON_ACCOUNT_DERIVATION_EMPTY_ACCOUNTS,
+];
+
 /**
  * Tron HD address derivation E2E cluster (WPN-685).
  *
@@ -122,10 +142,30 @@ async function assertTronAddressesForAccounts(
 describe('Tron account derivation', function (this: Suite) {
   this.timeout(240_000);
 
+  const sharedTronNode = new TronNode();
+
+  before(async function () {
+    await sharedTronNode.start(
+      buildTronNodeOptions(TRON_ACCOUNT_DERIVATION_ALL_ACCOUNTS),
+    );
+  });
+
+  after(async function () {
+    const hasFailedTest = this.test?.parent?.tests.some(
+      (suiteTest) => suiteTest.state === 'failed',
+    );
+    if (hasFailedTest && process.env.E2E_LEAVE_RUNNING === 'true') {
+      return;
+    }
+
+    await sharedTronNode.quit();
+  });
+
   it('derives Tron addresses while adding multichain accounts from Account 1 to Account 8', async function () {
     await withTronFixtures(
       {
-        accounts: [EMPTY_TRON_ACCOUNT],
+        accounts: TRON_ACCOUNT_DERIVATION_EMPTY_ACCOUNTS,
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -175,7 +215,8 @@ describe('Tron account derivation', function (this: Suite) {
   it('aligns Tron addresses for 8 existing multichain account groups', async function () {
     await withTronFixtures(
       {
-        accounts: [EMPTY_TRON_ACCOUNT],
+        accounts: TRON_ACCOUNT_DERIVATION_EMPTY_ACCOUNTS,
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -195,7 +236,8 @@ describe('Tron account derivation', function (this: Suite) {
   it('discovers Tron accounts through Account 5 when each account has assets', async function () {
     await withTronFixtures(
       {
-        accounts: buildDiscoveryAccountsThrough(5),
+        accounts: TRON_ACCOUNT_DERIVATION_DISCOVERY_ACCOUNTS,
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2({ onboarding: true }).build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -217,7 +259,8 @@ describe('Tron account derivation', function (this: Suite) {
   it('Shows each account Tron address on the quick-copy popup and copies it', async function () {
     await withTronFixtures(
       {
-        accounts: [EMPTY_TRON_ACCOUNT],
+        accounts: TRON_ACCOUNT_DERIVATION_EMPTY_ACCOUNTS,
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -259,7 +302,8 @@ describe('Tron account derivation', function (this: Suite) {
   it.skip('Shows Account 1 QR popup with address, copy link, and View on Tronscan', async function () {
     await withTronFixtures(
       {
-        accounts: [EMPTY_TRON_ACCOUNT],
+        accounts: TRON_ACCOUNT_DERIVATION_EMPTY_ACCOUNTS,
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -295,7 +339,8 @@ describe('Tron account derivation', function (this: Suite) {
   it('Shows each account Tron address on the Receive page and copies it', async function () {
     await withTronFixtures(
       {
-        accounts: [EMPTY_TRON_ACCOUNT],
+        accounts: TRON_ACCOUNT_DERIVATION_EMPTY_ACCOUNTS,
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
