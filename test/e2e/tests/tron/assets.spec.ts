@@ -1,6 +1,8 @@
 import { Suite } from 'mocha';
+import { EXPECTED_TRON_ADDRESSES_BY_INDEX } from '../../constants';
 import FixtureBuilderV2 from '../../fixtures/fixture-builder-v2';
 import { Driver } from '../../webdriver/driver';
+import { addMultipleAccounts } from '../../page-objects/flows/add-account.flow';
 import { login } from '../../page-objects/flows/login.flow';
 import {
   selectAllNetworksFromNetworkSelect,
@@ -32,6 +34,7 @@ const TRON_ASSET_LIST_TIMEOUT_MS = 30_000;
 const TRON_ASSETS_REMOTE_FEATURE_FLAGS = {
   remoteFeatureFlags: {
     batchSell: { enabled: true },
+    earnMusdCtaEnabled: false,
   },
 } as const;
 
@@ -39,15 +42,22 @@ const TRON_ASSETS_REMOTE_FEATURE_FLAGS = {
 const TRON_ASSETS_MANIFEST_FLAGS = {
   remoteFeatureFlags: {
     batchSell: { enabled: true },
+    earnMusdCtaEnabled: false,
   },
 } as const;
 
 const EMPTY_ACCOUNT_FIXTURE: TronFixtureAccount[] = [
-  { ...EMPTY_TRON_ACCOUNT },
+  {
+    ...EMPTY_TRON_ACCOUNT,
+    address: EXPECTED_TRON_ADDRESSES_BY_INDEX[0],
+  },
 ];
 
 const PORTFOLIO_ACCOUNT_FIXTURE: TronFixtureAccount[] = [
-  { ...TRON_PORTFOLIO_ACCOUNT },
+  {
+    ...TRON_PORTFOLIO_ACCOUNT,
+    address: EXPECTED_TRON_ADDRESSES_BY_INDEX[1],
+  },
 ];
 
 function buildTronAssetsFixture(): FixtureBuilderV2 {
@@ -68,12 +78,25 @@ function tronAssetsTestConfig(
   };
 }
 
-async function landOnTronHome(driver: Driver): Promise<void> {
+async function landOnTronHome(
+  driver: Driver,
+  accountIndex = 0,
+): Promise<void> {
   await login(driver, { validateBalance: false });
   await switchToNetworkFromNetworkSelect(driver, 'Popular', 'Tron');
-  // Refresh re-hydrates the UI from background state so asynchronously-fetched
-  // Snap balances appear reliably in the token list.
-  await driver.refresh();
+  if (accountIndex > 0) {
+    await addMultipleAccounts({
+      accountToSelect: `Account ${accountIndex + 1}`,
+      driver,
+      numberOfAccounts: accountIndex,
+    });
+  }
+  // Refresh re-hydrates the initial account from background state so
+  // asynchronously-fetched Snap balances appear reliably in the token list.
+  // Account switches already trigger that hydration.
+  if (accountIndex === 0) {
+    await driver.refresh();
+  }
   const homePage = new HomePage(driver);
   await homePage.checkPageIsLoaded();
 }
@@ -114,7 +137,6 @@ describe('Tron - Assets', function (this: Suite) {
             this.test?.fullTitle(),
           ),
           borrowedTronNode: sharedTronNode,
-          includeAnvil: false,
         },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);
@@ -141,10 +163,9 @@ describe('Tron - Assets', function (this: Suite) {
             this.test?.fullTitle(),
           ),
           borrowedTronNode: sharedTronNode,
-          includeAnvil: false,
         },
         async ({ driver }: { driver: Driver }) => {
-          await landOnTronHome(driver);
+          await landOnTronHome(driver, 1);
 
           const tokensTab = new TokensTab(driver);
           await waitForTronAssetList(tokensTab, 'Tron');
@@ -200,7 +221,6 @@ describe('Tron - Assets', function (this: Suite) {
             this.test?.fullTitle(),
           ),
           borrowedTronNode: sharedTronNode,
-          includeAnvil: false,
         },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);
@@ -245,7 +265,6 @@ describe('Tron - Assets', function (this: Suite) {
               this.test?.fullTitle(),
             ),
             borrowedTronNode: sharedTronNode,
-            includeAnvil: false,
           },
           async ({ driver }: { driver: Driver }) => {
             await landOnTronHome(driver);
@@ -267,7 +286,6 @@ describe('Tron - Assets', function (this: Suite) {
               this.test?.fullTitle(),
             ),
             borrowedTronNode: sharedTronNode,
-            includeAnvil: false,
           },
           async ({ driver }: { driver: Driver }) => {
             await landOnTronHome(driver);
@@ -297,7 +315,6 @@ describe('Tron - Assets', function (this: Suite) {
             this.test?.fullTitle(),
           ),
           borrowedTronNode: sharedTronNode,
-          includeAnvil: false,
         },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);
@@ -328,7 +345,6 @@ describe('Tron - Assets', function (this: Suite) {
             this.test?.fullTitle(),
           ),
           borrowedTronNode: sharedTronNode,
-          includeAnvil: false,
         },
         async ({ driver }: { driver: Driver }) => {
           await landOnTronHome(driver);

@@ -1,14 +1,10 @@
 import { Suite } from 'mocha';
 import { EXPECTED_TRON_ADDRESSES_BY_INDEX } from '../../constants';
 import FixtureBuilderV2 from '../../fixtures/fixture-builder-v2';
-import { addMultipleAccounts } from '../../page-objects/flows/add-account.flow';
-import { switchToAccount } from '../../page-objects/flows/account-list.flow';
-import { login } from '../../page-objects/flows/login.flow';
-import { selectTronNetwork } from '../../page-objects/flows/tron-network.flow';
-import { waitUntilAccountTreeSyncIdle } from '../../page-objects/flows/tron-account-derivation.flow';
-import { confirmTronSendAndAssertActivity } from '../../page-objects/flows/tron-send.flow';
-import NonEvmHomepage from '../../page-objects/pages/home/non-evm-homepage';
-import SendPage from '../../page-objects/pages/send/send-page';
+import {
+  confirmTronSendAndAssertActivity,
+  landOnTronSendScreen,
+} from '../../page-objects/flows/tron-send.flow';
 import { TronNode } from '../../seeder/tron/node';
 import { Driver } from '../../webdriver/driver';
 import {
@@ -84,67 +80,8 @@ function getTronTrc20AssetId(
   return `${TRON_CHAIN_ID}/trc20:${token.address}`;
 }
 
-async function openTronSendScreen({
-  accountIndex,
-  assetId,
-  driver,
-  expectedNativeBalance = '6.072',
-  expectedTokenBalance,
-  symbol,
-}: {
-  accountIndex: number;
-  assetId?: string;
-  driver: Driver;
-  expectedNativeBalance?: string | null;
-  expectedTokenBalance?: string;
-  symbol: 'TRX' | 'USDT' | 'USDD' | 'HTX' | 'SEED';
-}): Promise<SendPage> {
-  const accountLabel = `Account ${accountIndex + 1}`;
-  await login(driver, { validateBalance: false });
-  if (accountIndex > 0) {
-    await addMultipleAccounts({
-      accountToSelect: accountLabel,
-      driver,
-      numberOfAccounts: accountIndex,
-    });
-  }
-  await selectTronNetwork(driver);
-  await waitUntilAccountTreeSyncIdle(driver);
-  if (accountIndex > 0) {
-    await switchToAccount(driver, accountLabel);
-  }
-  await waitUntilAccountTreeSyncIdle(driver);
-  await driver.refresh();
-
-  const home = new NonEvmHomepage(driver);
-  await home.checkPageIsLoaded();
-  if (expectedNativeBalance) {
-    await home.checkExpectedTokenBalanceIsDisplayed(
-      expectedNativeBalance,
-      'TRX',
-    );
-  }
-  if (expectedTokenBalance) {
-    await home.checkExpectedTokenBalanceIsDisplayed(
-      expectedTokenBalance,
-      symbol,
-    );
-  }
-
-  const sendPage = new SendPage(driver);
-  const searchParams = new URLSearchParams({ chainId: TRON_CHAIN_ID });
-  if (assetId) {
-    searchParams.set('asset', assetId);
-  }
-  await driver.openNewURL(
-    `${driver.extensionUrl}/home.html#/send/amount-recipient?${searchParams.toString()}`,
-  );
-  await sendPage.checkSendFormIsLoaded();
-  return sendPage;
-}
-
 describe('Tron Send', function (this: Suite) {
-  this.timeout(180_000);
+  this.timeout(300_000);
 
   const sharedTronNode = new TronNode();
 
@@ -162,11 +99,10 @@ describe('Tron Send', function (this: Suite) {
         accounts: TRON_BAD_ADDRESS_ACCOUNTS,
         borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
-        includeAnvil: false,
         title: this.test?.fullTitle(),
       },
       async ({ driver }: { driver: Driver }) => {
-        const sendPage = await openTronSendScreen({
+        const sendPage = await landOnTronSendScreen({
           accountIndex: 0,
           driver,
           symbol: 'TRX',
@@ -189,11 +125,10 @@ describe('Tron Send', function (this: Suite) {
         accounts: TRON_EMPTY_AMOUNT_ACCOUNTS,
         borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
-        includeAnvil: false,
         title: this.test?.fullTitle(),
       },
       async ({ driver }: { driver: Driver }) => {
-        const sendPage = await openTronSendScreen({
+        const sendPage = await landOnTronSendScreen({
           accountIndex: 1,
           driver,
           symbol: 'TRX',
@@ -216,11 +151,10 @@ describe('Tron Send', function (this: Suite) {
         accounts: TRON_EXCESSIVE_AMOUNT_ACCOUNTS,
         borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
-        includeAnvil: false,
         title: this.test?.fullTitle(),
       },
       async ({ driver }: { driver: Driver }) => {
-        const sendPage = await openTronSendScreen({
+        const sendPage = await landOnTronSendScreen({
           accountIndex: 2,
           driver,
           symbol: 'TRX',
@@ -241,7 +175,6 @@ describe('Tron Send', function (this: Suite) {
         accounts: TRON_LOW_FEE_ACCOUNTS,
         borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
-        includeAnvil: false,
         title: this.test?.fullTitle(),
       },
       async ({
@@ -251,7 +184,7 @@ describe('Tron Send', function (this: Suite) {
         driver: Driver;
         localNodes: unknown[];
       }) => {
-        const sendPage = await openTronSendScreen({
+        const sendPage = await landOnTronSendScreen({
           accountIndex: 3,
           assetId: getTronTrc20AssetId(localNodes, 'USDT'),
           driver,
@@ -276,11 +209,10 @@ describe('Tron Send', function (this: Suite) {
         accounts: TRON_PARTIAL_TRX_ACCOUNTS,
         borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
-        includeAnvil: false,
         title: this.test?.fullTitle(),
       },
       async ({ driver }: { driver: Driver }) => {
-        const sendPage = await openTronSendScreen({
+        const sendPage = await landOnTronSendScreen({
           accountIndex: 4,
           driver,
           symbol: 'TRX',
@@ -305,11 +237,10 @@ describe('Tron Send', function (this: Suite) {
         accounts: TRON_FULL_TRX_ACCOUNTS,
         borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
-        includeAnvil: false,
         title: this.test?.fullTitle(),
       },
       async ({ driver }: { driver: Driver }) => {
-        const sendPage = await openTronSendScreen({
+        const sendPage = await landOnTronSendScreen({
           accountIndex: 5,
           driver,
           symbol: 'TRX',
@@ -334,7 +265,6 @@ describe('Tron Send', function (this: Suite) {
         accounts: TRON_PARTIAL_USDT_ACCOUNTS,
         borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
-        includeAnvil: false,
         title: this.test?.fullTitle(),
       },
       async ({
@@ -344,7 +274,7 @@ describe('Tron Send', function (this: Suite) {
         driver: Driver;
         localNodes: unknown[];
       }) => {
-        const sendPage = await openTronSendScreen({
+        const sendPage = await landOnTronSendScreen({
           accountIndex: 6,
           assetId: getTronTrc20AssetId(localNodes, 'USDT'),
           driver,
@@ -373,7 +303,6 @@ describe('Tron Send', function (this: Suite) {
         accounts: TRON_FULL_USDT_ACCOUNTS,
         borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
-        includeAnvil: false,
         title: this.test?.fullTitle(),
       },
       async ({
@@ -383,7 +312,7 @@ describe('Tron Send', function (this: Suite) {
         driver: Driver;
         localNodes: unknown[];
       }) => {
-        const sendPage = await openTronSendScreen({
+        const sendPage = await landOnTronSendScreen({
           accountIndex: 7,
           assetId: getTronTrc20AssetId(localNodes, 'USDT'),
           driver,

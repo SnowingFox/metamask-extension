@@ -6,20 +6,24 @@ import HomePage from '../pages/home/homepage';
 import NonEvmHomepage from '../pages/home/non-evm-homepage';
 import SendPage from '../pages/send/send-page';
 import { TRON_CHAIN_ID } from '../../tests/tron/mocks/common-tron';
+import { addMultipleAccounts } from './add-account.flow';
 import { login } from './login.flow';
 import { selectTronNetwork } from './tron-network.flow';
+import { waitUntilAccountTreeSyncIdle } from './tron-account-derivation.flow';
 
 const TRON_CONFIRM_TIMEOUT_MS = 30_000;
 const TRON_ACTIVITY_PENDING_OR_CONFIRMED_SELECTOR =
   '[data-tx-status="submitted"], [data-tx-status="approved"], [data-tx-status="unapproved"], [data-tx-status="pending"], [data-tx-status="confirmed"]';
 
 export async function landOnTronSendScreen({
+  accountIndex = 0,
   driver,
   symbol,
   assetId,
   expectedNativeBalance = '6.072',
   expectedTokenBalance,
 }: {
+  accountIndex?: number;
   driver: Driver;
   symbol: 'TRX' | 'USDT' | 'USDD' | 'HTX' | 'SEED';
   assetId?: string;
@@ -27,7 +31,15 @@ export async function landOnTronSendScreen({
   expectedTokenBalance?: string;
 }): Promise<SendPage> {
   await login(driver, { validateBalance: false });
+  if (accountIndex > 0) {
+    await addMultipleAccounts({
+      accountToSelect: `Account ${accountIndex + 1}`,
+      driver,
+      numberOfAccounts: accountIndex,
+    });
+  }
   await selectTronNetwork(driver);
+  await waitUntilAccountTreeSyncIdle(driver);
 
   // Refresh re-hydrates the UI from background state so asynchronously-fetched
   // Snap balances appear reliably in the token list (same pattern as assets.spec).
