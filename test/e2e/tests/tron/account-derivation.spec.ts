@@ -15,13 +15,17 @@ import AddressListModal from '../../page-objects/pages/multichain/address-list-m
 import NonEvmHomepage from '../../page-objects/pages/home/non-evm-homepage';
 import { selectTronNetwork } from '../../page-objects/flows/tron-network.flow';
 import { base58AddressToHex } from '../../seeder/tron/assets';
+import { TronNode } from '../../seeder/tron/node';
 import {
   SUN_PER_TRX,
   TRON_ACCOUNT_ADDRESS,
   TRX_TO_USD_RATE,
 } from './mocks/common-tron';
 import { EMPTY_TRON_ACCOUNT } from './fixtures/environments';
-import { withTronFixtures } from './fixtures/with-tron-fixtures';
+import {
+  buildTronNodeOptions,
+  withTronFixtures,
+} from './fixtures/with-tron-fixtures';
 import { TRX } from './fixtures/tokens';
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -122,10 +126,30 @@ async function assertTronAddressesForAccounts(
 describe('Tron account derivation', function (this: Suite) {
   this.timeout(240_000);
 
+  const sharedTronNode = new TronNode();
+
+  before(async function () {
+    await sharedTronNode.start(
+      buildTronNodeOptions(buildDiscoveryAccountsThrough(5)),
+    );
+  });
+
+  after(async function () {
+    const hasFailedTest = this.test?.parent?.tests.some(
+      (suiteTest) => suiteTest.state === 'failed',
+    );
+    if (hasFailedTest && process.env.E2E_LEAVE_RUNNING === 'true') {
+      return;
+    }
+
+    await sharedTronNode.quit();
+  });
+
   it('derives Tron addresses while adding multichain accounts from Account 1 to Account 8', async function () {
     await withTronFixtures(
       {
         accounts: [EMPTY_TRON_ACCOUNT],
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -176,6 +200,7 @@ describe('Tron account derivation', function (this: Suite) {
     await withTronFixtures(
       {
         accounts: [EMPTY_TRON_ACCOUNT],
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -196,6 +221,7 @@ describe('Tron account derivation', function (this: Suite) {
     await withTronFixtures(
       {
         accounts: buildDiscoveryAccountsThrough(5),
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2({ onboarding: true }).build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -218,6 +244,7 @@ describe('Tron account derivation', function (this: Suite) {
     await withTronFixtures(
       {
         accounts: [EMPTY_TRON_ACCOUNT],
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -260,6 +287,7 @@ describe('Tron account derivation', function (this: Suite) {
     await withTronFixtures(
       {
         accounts: [EMPTY_TRON_ACCOUNT],
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),
@@ -296,6 +324,7 @@ describe('Tron account derivation', function (this: Suite) {
     await withTronFixtures(
       {
         accounts: [EMPTY_TRON_ACCOUNT],
+        borrowedTronNode: sharedTronNode,
         fixtures: new FixtureBuilderV2().build(),
         includeAnvil: false,
         title: this.test?.fullTitle(),

@@ -7,9 +7,24 @@ import {
   USDD,
   USDT,
 } from '../tests/tron/fixtures/tokens';
-import { buildTronNodeOptions } from '../tests/tron/fixtures/with-tron-fixtures';
+import { withFixtures } from '../helpers';
+import { TronNode } from '../seeder/tron/node';
+import {
+  buildTronNodeOptions,
+  withTronFixtures,
+} from '../tests/tron/fixtures/with-tron-fixtures';
+
+jest.mock('../helpers', () => ({
+  withFixtures: jest.fn(),
+}));
+
+const withFixturesMock = jest.mocked(withFixtures);
 
 describe('withTronFixtures', () => {
+  beforeEach(() => {
+    withFixturesMock.mockReset();
+  });
+
   it('builds Tron local node options from explicit account assets', () => {
     expect(
       buildTronNodeOptions([
@@ -43,5 +58,46 @@ describe('withTronFixtures', () => {
         },
       },
     });
+  });
+
+  it('exposes a borrowed Tron node without giving the fixture ownership', async () => {
+    const borrowedTronNode = new TronNode();
+    const afterLocalNodesStart = jest.fn();
+    const testSuite = jest.fn();
+    const withFixturesLocalNodes: unknown[] = [];
+
+    withFixturesMock.mockImplementation(async (options, callback) => {
+      const { afterLocalNodesStart: startLocalNodes } = options as {
+        afterLocalNodesStart: (context: {
+          localNodes: unknown[];
+        }) => Promise<void>;
+      };
+      await startLocalNodes({
+        localNodes: withFixturesLocalNodes,
+      });
+      await callback({ localNodes: withFixturesLocalNodes });
+    });
+
+    await withTronFixtures(
+      {
+        accounts: [{ address: TRON_ACCOUNT_ADDRESS }],
+        afterLocalNodesStart,
+        borrowedTronNode,
+        includeAnvil: false,
+      },
+      testSuite,
+    );
+
+    expect(withFixturesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ localNodeOptions: ['none'] }),
+      expect.any(Function),
+    );
+    expect(withFixturesLocalNodes).toStrictEqual([]);
+    expect(afterLocalNodesStart).toHaveBeenCalledWith({
+      localNodes: [borrowedTronNode],
+    });
+    expect(testSuite).toHaveBeenCalledWith(
+      expect.objectContaining({ localNodes: [borrowedTronNode] }),
+    );
   });
 });
