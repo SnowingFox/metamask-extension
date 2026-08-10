@@ -81,12 +81,6 @@ export type WithTronFixturesOptions = Omit<
   afterLocalNodesStart?: (context: {
     localNodes: unknown[];
   }) => Promise<void> | void;
-  /**
-   * A pre-started Tron node owned by the caller. The node must already contain
-   * the balances and contracts described by `accounts`; this fixture only
-   * wires it into mocks and the test callback, and never stops or reseeds it.
-   */
-  borrowedTronNode?: TronNode;
   fixtures?: unknown;
   includeAnvil?: boolean;
   testSpecificMock?: (
@@ -140,28 +134,12 @@ export async function withTronFixtures(
   const {
     afterLocalNodesStart,
     accounts,
-    borrowedTronNode,
     includeAnvil = true,
     testSpecificMock,
     ...withFixtureOptions
   } = options;
   const nodeOptions = buildTronNodeOptions(accounts);
   const { trc20Balances, ...startupNodeOptions } = nodeOptions;
-  const tronLocalNodeOptions = borrowedTronNode
-    ? []
-    : [
-        {
-          type: 'tron',
-          options: startupNodeOptions,
-        },
-      ];
-  const localNodeOptions = [
-    ...(includeAnvil ? ['anvil'] : []),
-    ...tronLocalNodeOptions,
-  ];
-  if (localNodeOptions.length === 0) {
-    localNodeOptions.push('none');
-  }
   let tronSeeder: TronSeeder | undefined;
   // Captured in afterLocalNodesStart (which runs before the network mocks are
   // set up) so the fixture mocks can talk to the local Tron node.
@@ -171,18 +149,20 @@ export async function withTronFixtures(
   await withFixtures(
     {
       ...withFixtureOptions,
-      localNodeOptions,
+      localNodeOptions: [
+        ...(includeAnvil ? ['anvil'] : []),
+        {
+          type: 'tron',
+          options: startupNodeOptions,
+        },
+      ],
       afterLocalNodesStart: async (context: { localNodes: unknown[] }) => {
-        capturedLocalNodes = borrowedTronNode
-          ? [...context.localNodes, borrowedTronNode]
-          : context.localNodes;
-        if (!borrowedTronNode) {
-          tronSeeder = await seedTronSmartContracts(
-            capturedLocalNodes,
-            trc20Balances,
-          );
-        }
-        await afterLocalNodesStart?.({ localNodes: capturedLocalNodes });
+        capturedLocalNodes = context.localNodes;
+        tronSeeder = await seedTronSmartContracts(
+          context.localNodes,
+          trc20Balances,
+        );
+        await afterLocalNodesStart?.(context);
       },
       testSpecificMock: async (mockServer: Mockttp) => {
         const customEndpoints =
@@ -199,7 +179,6 @@ export async function withTronFixtures(
     async (context) => {
       await testSuite({
         ...context,
-        localNodes: capturedLocalNodes,
         contractRegistry:
           context.contractRegistry ?? tronSeeder?.getContractRegistry(),
       });

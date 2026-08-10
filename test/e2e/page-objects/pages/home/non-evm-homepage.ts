@@ -5,13 +5,11 @@ class NonEvmHomepage extends HomePage {
   async checkExpectedTokenBalanceIsDisplayed(
     expectedTokenBalance: string,
     symbol: string,
-    timeout?: number,
   ): Promise<void> {
     const tokensTab = new TokensTab(this.driver);
     await tokensTab.checkExpectedTokenBalanceIsDisplayed(
       expectedTokenBalance,
       symbol,
-      timeout,
     );
   }
 

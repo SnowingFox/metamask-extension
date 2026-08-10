@@ -6,27 +6,12 @@ import HomePage from '../pages/home/homepage';
 import NonEvmHomepage from '../pages/home/non-evm-homepage';
 import SendPage from '../pages/send/send-page';
 import { TRON_CHAIN_ID } from '../../tests/tron/mocks/common-tron';
-import { switchToAccount } from './account-list.flow';
-import {
-  addNHdAccountsForTronDerivation,
-  waitUntilAccountTreeSyncIdle,
-} from './tron-account-derivation.flow';
 import { login } from './login.flow';
-import { switchToNetworkFromNetworkSelect } from './network.flow';
 import { selectTronNetwork } from './tron-network.flow';
 
 const TRON_CONFIRM_TIMEOUT_MS = 30_000;
-const TRON_BALANCE_TIMEOUT_MS = 30_000;
 const TRON_ACTIVITY_PENDING_OR_CONFIRMED_SELECTOR =
   '[data-tx-status="submitted"], [data-tx-status="approved"], [data-tx-status="unapproved"], [data-tx-status="pending"], [data-tx-status="confirmed"]';
-
-type TronSendScreenOptions = {
-  assetId?: string;
-  driver: Driver;
-  expectedNativeBalance?: string | null;
-  expectedTokenBalance?: string;
-  symbol: 'TRX' | 'USDT' | 'USDD' | 'HTX' | 'SEED';
-};
 
 export async function landOnTronSendScreen({
   driver,
@@ -34,70 +19,16 @@ export async function landOnTronSendScreen({
   assetId,
   expectedNativeBalance = '6.072',
   expectedTokenBalance,
-}: TronSendScreenOptions): Promise<SendPage> {
+}: {
+  driver: Driver;
+  symbol: 'TRX' | 'USDT' | 'USDD' | 'HTX' | 'SEED';
+  assetId?: string;
+  expectedNativeBalance?: string | null;
+  expectedTokenBalance?: string;
+}): Promise<SendPage> {
   await login(driver, { validateBalance: false });
   await selectTronNetwork(driver);
 
-  return openTronSendScreen({
-    assetId,
-    driver,
-    expectedNativeBalance,
-    expectedTokenBalance,
-    symbol,
-  });
-}
-
-/**
- * Returns a shared Tron fixture to the extension homepage, selects one of the
- * pre-created multichain accounts, and opens Send for that account.
- *
- * @param options - Shared-suite Send options.
- * @param options.accountLabel - Multichain account label to select.
- * @returns The loaded Send page.
- */
-export async function landOnTronSendScreenForAccount({
-  accountLabel,
-  ...sendOptions
-}: TronSendScreenOptions & { accountLabel: string }): Promise<SendPage> {
-  const { driver } = sendOptions;
-  await driver.navigate();
-  await switchToAccount(driver, accountLabel);
-  await waitUntilAccountTreeSyncIdle(driver);
-
-  return openTronSendScreen(sendOptions);
-}
-
-/**
- * Prepares an unlocked wallet for a suite that shares one Tron fixture.
- * Existing HD groups are created before Tron is enabled so BIP44 Stage 2 can
- * derive all corresponding Tron accounts in one account-tree synchronization.
- *
- * @param options - Shared-suite setup options.
- * @param options.driver - WebDriver instance.
- * @param options.totalAccounts - Total number of multichain account groups.
- */
-export async function prepareSharedTronSendSuite({
-  driver,
-  totalAccounts,
-}: {
-  driver: Driver;
-  totalAccounts: number;
-}): Promise<void> {
-  await login(driver, { validateBalance: false });
-  await addNHdAccountsForTronDerivation(driver, totalAccounts);
-  await switchToNetworkFromNetworkSelect(driver, 'Popular', 'Tron');
-  await driver.navigate();
-  await new HomePage(driver).checkPageIsLoaded();
-  await waitUntilAccountTreeSyncIdle(driver);
-}
-
-async function openTronSendScreen({
-  assetId,
-  driver,
-  expectedNativeBalance = '6.072',
-  expectedTokenBalance,
-  symbol,
-}: TronSendScreenOptions): Promise<SendPage> {
   // Refresh re-hydrates the UI from background state so asynchronously-fetched
   // Snap balances appear reliably in the token list (same pattern as assets.spec).
   await driver.refresh();
@@ -112,14 +43,12 @@ async function openTronSendScreen({
     await home.checkExpectedTokenBalanceIsDisplayed(
       expectedNativeBalance,
       'TRX',
-      TRON_BALANCE_TIMEOUT_MS,
     );
   }
   if (expectedTokenBalance) {
     await home.checkExpectedTokenBalanceIsDisplayed(
       expectedTokenBalance,
       symbol,
-      TRON_BALANCE_TIMEOUT_MS,
     );
   }
 
@@ -153,11 +82,9 @@ async function waitForTronSendActivity(driver: Driver): Promise<void> {
 export async function confirmTronSendAndAssertActivity({
   driver,
   expectedAmount,
-  expectedConfirmedTransactions = 1,
 }: {
   driver: Driver;
   expectedAmount?: string;
-  expectedConfirmedTransactions?: number;
 }): Promise<void> {
   const snapConfirmation = new SnapTransactionConfirmation(driver);
   const extensionHandle = await driver.driver.getWindowHandle();
@@ -188,9 +115,7 @@ export async function confirmTronSendAndAssertActivity({
 
   const activityList = new ActivityTab(driver);
   await waitForTronSendActivity(driver);
-  await activityList.checkConfirmedTxNumberDisplayedInActivity(
-    expectedConfirmedTransactions,
-  );
+  await activityList.checkConfirmedTxNumberDisplayedInActivity(1);
   if (expectedAmount) {
     await activityList.checkTxAmountInActivity(expectedAmount, 1);
   }

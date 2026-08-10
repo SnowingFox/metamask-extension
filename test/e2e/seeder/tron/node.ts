@@ -342,17 +342,6 @@ export class TronNode {
     await this.signAndBroadcastTransaction(tx, fundingAccount.privateKey);
   }
 
-  async getNativeBalance(address: string): Promise<number> {
-    const account = (await this.fetchJson('/wallet/getaccount', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address, visible: true }),
-      timeoutMs: 5_000,
-    })) as TronAccountResponse;
-
-    return account.balance ?? 0;
-  }
-
   getTrc10Balances(address: string): Partial<Record<TronTrc10Symbol, string>> {
     return this.#trc10Balances[address] ?? {};
   }
