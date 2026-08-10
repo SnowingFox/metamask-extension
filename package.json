@@ -40,6 +40,7 @@
     "java-tron-up:install": "yarn java-tron-up install",
     "skills": "metamask-skills sync",
     "skills:postinstall": "metamask-skills postinstall",
+    "postinstall": "node -e \"process.exit(process.env.CI ? 0 : 1)\" || (yarn webpack:clearcache && yarn foundryup && yarn skills:postinstall)",
     "env:e2e": "SEGMENT_HOST='https://api.segment.io' SEGMENT_WRITE_KEY='FAKE' yarn",
     "start": "yarn webpack --watch",
     "start:with-state": "node ./app/scripts/start-with-wallet-state.mjs",
